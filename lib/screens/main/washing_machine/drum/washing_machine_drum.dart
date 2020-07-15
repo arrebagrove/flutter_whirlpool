@@ -2,10 +2,12 @@ import 'dart:math';
 import 'dart:ui';
 
 import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_whirlpool/screens/main/washing_machine/drum/physic/drum_physic.dart';
 import 'package:flutter_whirlpool/screens/main/washing_machine/drum/physic/drum_physic_renderer.dart';
 import 'package:flutter_whirlpool/screens/main/washing_machine/washing_machine_controller.dart';
+import 'package:flutter_whirlpool/shared/colors.dart';
 import 'package:flutter_whirlpool/shared/utils.dart';
 
 class WashingMachineDrum extends LeafRenderObjectWidget {
@@ -33,6 +35,7 @@ class _WhirlpoolRenderObject extends RenderBox {
   WashingMachineController get controller => _controller;
 
   WashingMachineController _controller;
+  double _lastTimeStamp = 0.0;
 
   set controller(WashingMachineController value) {
     if (_controller == value) {
@@ -44,7 +47,7 @@ class _WhirlpoolRenderObject extends RenderBox {
     markNeedsPaint();
     markNeedsLayout();
 
-    _controller.start();
+    SchedulerBinding.instance.scheduleFrameCallback(frame);
   }
 
   @override
@@ -63,17 +66,35 @@ class _WhirlpoolRenderObject extends RenderBox {
     //     context.canvas, controller.physic.whirlpoolCoreBody);
   }
 
+  frame(Duration timeStamp) {
+    final double t =
+        timeStamp.inMicroseconds / Duration.microsecondsPerMillisecond / 1000.0;
+
+    if (_lastTimeStamp == 0) {
+      _lastTimeStamp = t;
+      SchedulerBinding.instance.scheduleFrameCallback(frame);
+      return;
+    }
+
+    double elapsed = (t - _lastTimeStamp).clamp(0.0, 1.0);
+    _lastTimeStamp = t;
+
+    controller?.step(elapsed);
+    controller?.redraw();
+    SchedulerBinding.instance.scheduleFrameCallback(frame);
+  }
+
   _drawWhirlpool(PaintingContext context, Offset offset) {
     if (controller.devMode != true) {
       context.pushLayer(
           ColorFilterLayer(
             colorFilter: ColorFilter.matrix(
-              [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 20, -800],
+              [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 20, -1200],
             ),
           ),
           (PaintingContext context2, Offset offset2) => context2.pushLayer(
                 ImageFilterLayer(
-                  imageFilter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                  imageFilter: ImageFilter.blur(sigmaX: 13, sigmaY: 13),
                 ),
                 (PaintingContext context3, Offset offset3) =>
                     _drawBalls(context3, offset3),
@@ -105,11 +126,12 @@ class _WhirlpoolRenderObject extends RenderBox {
     Canvas canvas = context.canvas;
     canvas.drawRect(
       context.estimatedBounds,
-      Paint()..color = Color.fromARGB(255, 233, 244, 249),
+      Paint()..color = CustomColors.drumBackground,
     );
 
-    Path washingMachine = _createDrumPath(3, 10, context.estimatedBounds);
-    Path washingMachineBackground = _createDrumPath(
+    Path washingMachineRibForeground =
+        _createDrumPath(3, 10, context.estimatedBounds);
+    Path washingMachineRibBackground = _createDrumPath(
       3,
       10,
       context.estimatedBounds,
@@ -125,32 +147,29 @@ class _WhirlpoolRenderObject extends RenderBox {
         -context.estimatedBounds.center.dx, -context.estimatedBounds.center.dy);
 
     canvas.drawPath(
-        washingMachineBackground,
+        washingMachineRibBackground,
         Paint()
-          ..color = Color.fromARGB(255, 228, 238, 247)
-          ..style = PaintingStyle.fill
-          ..strokeWidth = 2);
+          ..color = CustomColors.drumRibBackground
+          ..style = PaintingStyle.fill);
 
     canvas.drawPath(
-        washingMachine,
+        washingMachineRibForeground,
         Paint()
-          ..color = Color.fromARGB(255, 236, 244, 250)
-          ..style = PaintingStyle.fill
-          ..strokeWidth = 2);
+          ..color = CustomColors.drumRibForeground
+          ..style = PaintingStyle.fill);
 
     canvas.restore();
 
     canvas.drawRect(
       context.estimatedBounds,
       Paint()
-        ..color = Color.fromARGB(255, 233, 244, 249)
-        ..shader = RadialGradient(colors: [
-          Color.fromARGB(0, 255, 255, 255),
-          Color.fromARGB(120, 202, 213, 225),
-        ], stops: [
-          0.85,
-          1,
-        ]).createShader(context.estimatedBounds),
+        ..shader = RadialGradient(
+          colors: CustomColors.drumInnerShadowColors,
+          stops: [
+            0.85,
+            1,
+          ],
+        ).createShader(context.estimatedBounds),
     );
   }
 
